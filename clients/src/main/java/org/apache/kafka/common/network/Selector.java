@@ -531,11 +531,18 @@ public class Selector implements Selectable, AutoCloseable {
                     try {
                         channel.prepare();
                     } catch (AuthenticationException e) {
-                        sensors.failedAuthentication.record();
+                        if (channel.authentications() == 0) // TODO: Add a different metric for re-authentication failure
+                            sensors.failedAuthentication.record();
                         throw e;
                     }
-                    if (channel.ready())
-                        sensors.successfulAuthentication.record();
+                    if (channel.ready()) {
+                        if (channel.authentications() == 1) // TODO: Add a different metric for re-authentications
+                            sensors.successfulAuthentication.record();
+                        Deque<NetworkReceive> pendingReceives = channel.getAndClearCompletedReceives();
+                        if (pendingReceives != null && !pendingReceives.isEmpty()) {
+                            stagedReceives.put(channel, pendingReceives);
+                        }
+                    }
                 }
 
                 attemptRead(key, channel);
@@ -945,9 +952,13 @@ public class Selector implements Selectable, AutoCloseable {
     }
 
     private void addToCompletedReceives(KafkaChannel channel, Deque<NetworkReceive> stagedDeque) {
-        NetworkReceive networkReceive = stagedDeque.poll();
-        this.completedReceives.add(networkReceive);
-        this.sensors.recordBytesReceived(channel.id(), networkReceive.size());
+        if (channel.maybeReauthenticateClient(stagedDeque)) {
+            stagedDeque.clear();
+        } else {
+            NetworkReceive networkReceive = stagedDeque.poll();
+            this.completedReceives.add(networkReceive);
+            this.sensors.recordBytesReceived(channel.id(), networkReceive.size());
+        }
     }
 
     // only for testing

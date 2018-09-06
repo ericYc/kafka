@@ -21,6 +21,7 @@ import org.apache.kafka.common.security.auth.KafkaPrincipal;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Deque;
 
 /**
  * Authentication for Channel
@@ -54,4 +55,20 @@ public interface Authenticator extends Closeable {
      * returns true if authentication is complete otherwise returns false;
      */
     boolean complete();
+
+    default boolean supportsClientReauth() {
+        return false;
+    }
+
+    default boolean supportsServerReauth() {
+        return false;
+    }
+
+    default void reauthenticate(AuthenticationMetadata authMetadata) throws IOException {
+    }
+
+    default Deque<NetworkReceive> getAndClearAuthenticatedReceives() {
+        return null;
+    }
+
 }

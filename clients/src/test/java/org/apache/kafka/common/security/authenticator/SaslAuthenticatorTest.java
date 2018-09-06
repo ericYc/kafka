@@ -23,6 +23,7 @@ import java.nio.channels.SelectionKey;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -96,6 +97,8 @@ import org.apache.kafka.common.utils.Time;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -105,6 +108,7 @@ import static org.junit.Assert.fail;
 /**
  * Tests for the Sasl authenticator. These use a test harness that runs a simple socket server that echos back responses.
  */
+@RunWith(value = Parameterized.class)
 public class SaslAuthenticatorTest {
 
     private static final int BUFFER_SIZE = 4 * 1024;
@@ -119,6 +123,11 @@ public class SaslAuthenticatorTest {
     private Map<String, Object> saslServerConfigs;
     private CredentialCache credentialCache;
     private int nextCorrelationId;
+    private final long delayBetweenReceivesMs;
+
+    public SaslAuthenticatorTest(long delayBetweenReceivesMs) {
+        this.delayBetweenReceivesMs = delayBetweenReceivesMs;
+    }
 
     @Before
     public void setup() throws Exception {
@@ -1695,5 +1704,13 @@ public class SaslAuthenticatorTest {
                 throw new SaslAuthenticationException("Login initialization failed", e);
             }
         }
+    }
+
+    @Parameterized.Parameters(name = "delayBetweenReceivesMs={0}")
+    public static Collection<Object[]> data() {
+        List<Object[]> values = new ArrayList<>();
+        values.add(new Object[]{0L});
+        values.add(new Object[]{1000L});
+        return values;
     }
 }

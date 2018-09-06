@@ -25,6 +25,7 @@ import org.apache.kafka.common.errors.InvalidRequestException;
 import org.apache.kafka.common.errors.SaslAuthenticationException;
 import org.apache.kafka.common.errors.UnsupportedSaslMechanismException;
 import org.apache.kafka.common.errors.UnsupportedVersionException;
+import org.apache.kafka.common.network.AuthenticationMetadata;
 import org.apache.kafka.common.network.Authenticator;
 import org.apache.kafka.common.network.ChannelBuilders;
 import org.apache.kafka.common.network.ListenerName;
@@ -220,6 +221,17 @@ public class SaslServerAuthenticator implements Authenticator {
         } catch (PrivilegedActionException e) {
             throw new SaslException("Kafka Server failed to create a SaslServer to interact with a client during session authentication", e.getCause());
         }
+    }
+
+    @Override
+    public void reauthenticate(AuthenticationMetadata authMetadata) throws IOException {
+        netInBuffer = authMetadata.currentReceive;
+        authenticate();
+    }
+
+    @Override
+    public boolean supportsServerReauth() {
+        return true;
     }
 
     /**

@@ -21,7 +21,11 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.PartitionInfo;
+import org.apache.kafka.common.network.KafkaChannel;
+import org.apache.kafka.common.network.NetworkReceive;
+import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.types.Struct;
+import org.apache.kafka.common.requests.RequestHeader;
 import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -355,5 +359,20 @@ public class TestUtils {
                     cause.getClass().getSimpleName(),
                 exceptionClass, cause.getClass());
         }
+    }
+
+    public static boolean maybeReauthenticate(KafkaChannel channel, NetworkReceive networkReceive) {
+        ByteBuffer payload = networkReceive.payload();
+        ByteBuffer buf = payload.duplicate();
+        try {
+            RequestHeader header = RequestHeader.parse(buf);
+            if (header.apiKey() == ApiKeys.SASL_HANDSHAKE) {
+                payload.position(payload.limit());
+                return channel.maybeReauthenticateServer(networkReceive);
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return false;
     }
 }

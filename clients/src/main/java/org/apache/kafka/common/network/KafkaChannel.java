@@ -25,7 +25,9 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.channels.SelectionKey;
+import java.util.Deque;
 import java.util.Objects;
+import java.util.function.Function;
 
 public class KafkaChannel {
     /**
@@ -73,10 +75,12 @@ public class KafkaChannel {
         THROTTLE_STARTED,
         THROTTLE_ENDED
     };
+    private static final long REAUTH_INTERVAL_MS = 500;
 
     private final String id;
     private final TransportLayer transportLayer;
-    private final Authenticator authenticator;
+    private final Function<AuthenticationMetadata, Authenticator> authenticatorCreator;
+    private Authenticator authenticator;
     // Tracks accumulated network thread time. This is updated on the network thread.
     // The values are read and reset after each response is sent.
     private long networkThreadTimeNanos;
@@ -89,17 +93,48 @@ public class KafkaChannel {
     private boolean disconnected;
     private ChannelMuteState muteState;
     private ChannelState state;
+    private int authentications;
+    private long nextReauthenticationMs = Long.MAX_VALUE;
 
-    public KafkaChannel(String id, TransportLayer transportLayer, Authenticator authenticator, int maxReceiveSize, MemoryPool memoryPool) throws IOException {
+    public KafkaChannel(String id, TransportLayer transportLayer,
+                        Function<AuthenticationMetadata, Authenticator> authenticatorCreator,
+                        int maxReceiveSize, MemoryPool memoryPool) throws IOException {
         this.id = id;
         this.transportLayer = transportLayer;
-        this.authenticator = authenticator;
+        this.authenticatorCreator = authenticatorCreator;
+        this.authenticator = authenticatorCreator.apply(new AuthenticationMetadata(false, null, null));
         this.networkThreadTimeNanos = 0L;
         this.maxReceiveSize = maxReceiveSize;
         this.memoryPool = memoryPool;
         this.disconnected = false;
         this.muteState = ChannelMuteState.NOT_MUTED;
         this.state = ChannelState.NOT_CONNECTED;
+    }
+
+    boolean maybeReauthenticateClient(Deque<NetworkReceive> stagedReceives) {
+        if (!authenticator.supportsClientReauth())
+            return false;
+        if (ready() && nextReauthenticationMs < System.currentTimeMillis() && send == null) {
+            nextReauthenticationMs = Long.MAX_VALUE;
+            NetworkReceive currentReceive = stagedReceives == null || stagedReceives.peekLast() != receive ? receive : null;
+            receive = null;
+            authenticator = authenticatorCreator.apply(new AuthenticationMetadata(true, stagedReceives, currentReceive));
+            return true;
+        }
+        return false;
+    }
+
+    public boolean maybeReauthenticateServer(NetworkReceive networkReceive) {
+        if (!ready() || !authenticator.supportsServerReauth())
+            return false;
+        else {
+            authenticator = authenticatorCreator.apply(new AuthenticationMetadata(true, null, networkReceive));
+            return true;
+        }
+    }
+
+    public Deque<NetworkReceive> getAndClearCompletedReceives() {
+        return authenticator.getAndClearAuthenticatedReceives();
     }
 
     public void close() throws IOException {
@@ -138,8 +173,12 @@ public class KafkaChannel {
             }
             throw e;
         }
-        if (ready())
+        if (ready()) {
+            authentications++;
             state = ChannelState.READY;
+            if (authenticator.supportsClientReauth())
+                nextReauthenticationMs = System.currentTimeMillis() + REAUTH_INTERVAL_MS;
+        }
     }
 
     public void disconnect() {
@@ -164,6 +203,10 @@ public class KafkaChannel {
 
     public boolean isConnected() {
         return transportLayer.isConnected();
+    }
+
+    public int authentications() {
+        return authentications;
     }
 
     public String id() {
@@ -391,4 +434,5 @@ public class KafkaChannel {
     public int hashCode() {
         return Objects.hash(id);
     }
+
 }

@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.channels.SelectionKey;
 import java.util.Map;
+import java.util.function.Function;
 
 public class PlaintextChannelBuilder implements ChannelBuilder {
     private static final Logger log = LoggerFactory.getLogger(PlaintextChannelBuilder.class);
@@ -52,8 +53,8 @@ public class PlaintextChannelBuilder implements ChannelBuilder {
     public KafkaChannel buildChannel(String id, SelectionKey key, int maxReceiveSize, MemoryPool memoryPool) throws KafkaException {
         try {
             PlaintextTransportLayer transportLayer = new PlaintextTransportLayer(key);
-            PlaintextAuthenticator authenticator = new PlaintextAuthenticator(configs, transportLayer, listenerName);
-            return new KafkaChannel(id, transportLayer, authenticator, maxReceiveSize,
+            Function<AuthenticationMetadata, Authenticator> authenticatorCreator = a -> new PlaintextAuthenticator(configs, transportLayer, listenerName);
+            return new KafkaChannel(id, transportLayer, authenticatorCreator, maxReceiveSize,
                     memoryPool != null ? memoryPool : MemoryPool.NONE);
         } catch (Exception e) {
             log.warn("Failed to create channel due to ", e);

@@ -37,6 +37,7 @@ import org.apache.kafka.common.metrics._
 import org.apache.kafka.common.metrics.stats.Meter
 import org.apache.kafka.common.network.KafkaChannel.ChannelMuteEvent
 import org.apache.kafka.common.network.{ChannelBuilder, ChannelBuilders, KafkaChannel, ListenerName, Selectable, Send, Selector => KSelector}
+import org.apache.kafka.common.protocol.ApiKeys
 import org.apache.kafka.common.requests.{RequestContext, RequestHeader}
 import org.apache.kafka.common.security.auth.SecurityProtocol
 import org.apache.kafka.common.utils.{KafkaThread, LogContext, Time}
@@ -706,9 +707,11 @@ private[kafka] class Processor(val id: Int,
               channel.principal, listenerName, securityProtocol)
             val req = new RequestChannel.Request(processor = id, context = context,
               startTimeNanos = time.nanoseconds, memoryPool, receive.payload, requestChannel.metrics)
-            requestChannel.sendRequest(req)
-            selector.mute(connectionId)
-            handleChannelMuteEvent(connectionId, ChannelMuteEvent.REQUEST_RECEIVED)
+            if (header.apiKey != ApiKeys.SASL_HANDSHAKE || !channel.maybeReauthenticateServer(receive)) {
+              requestChannel.sendRequest(req)
+              selector.mute(connectionId)
+              handleChannelMuteEvent(connectionId, ChannelMuteEvent.REQUEST_RECEIVED)
+            }
           case None =>
             // This should never happen since completed receives are processed immediately after `poll()`
             throw new IllegalStateException(s"Channel ${receive.source} removed from selector before processing completed receive")

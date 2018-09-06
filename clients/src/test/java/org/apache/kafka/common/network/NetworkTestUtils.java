@@ -56,7 +56,10 @@ public class NetworkTestUtils {
     }
 
     public static void checkClientConnection(Selector selector, String node, int minMessageSize, int messageCount) throws Exception {
+        checkClientConnection(selector, node, minMessageSize, messageCount, 0L);
+    }
 
+    public static void checkClientConnection(Selector selector, String node, int minMessageSize, int messageCount, long delayMs) throws Exception {
         waitForChannelReady(selector, node);
         String prefix = TestUtils.randomString(minMessageSize);
         int requests = 0;
@@ -70,9 +73,11 @@ public class NetworkTestUtils {
             for (NetworkReceive receive : selector.completedReceives()) {
                 assertEquals(prefix + "-" + responses, new String(Utils.toArray(receive.payload())));
                 responses++;
+                if (delayMs > 0)
+                    Thread.sleep(delayMs);
             }
 
-            for (int i = 0; i < selector.completedSends().size() && requests < messageCount && selector.isChannelReady(node); i++, requests++) {
+            for (int i = 0; requests < messageCount && (i < selector.completedSends().size() || requests == responses) && selector.isChannelReady(node); i++, requests++) {
                 selector.send(new NetworkSend(node, ByteBuffer.wrap((prefix + "-" + requests).getBytes())));
             }
         }

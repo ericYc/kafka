@@ -62,6 +62,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 import javax.security.auth.Subject;
 
@@ -182,24 +183,42 @@ public class SaslChannelBuilder implements ChannelBuilder, ListenerReconfigurabl
             SocketChannel socketChannel = (SocketChannel) key.channel();
             Socket socket = socketChannel.socket();
             TransportLayer transportLayer = buildTransportLayer(id, key, socketChannel);
-            Authenticator authenticator;
+            Function<AuthenticationMetadata, Authenticator> authenticatorCreator;
             if (mode == Mode.SERVER) {
-                authenticator = buildServerAuthenticator(configs,
-                        saslCallbackHandlers,
-                        id,
-                        transportLayer,
-                        subjects);
+                authenticatorCreator = authMetadata -> {
+                    try {
+                        SaslServerAuthenticator serverAuthenticator = buildServerAuthenticator(configs,
+                                saslCallbackHandlers,
+                                id,
+                                transportLayer,
+                                subjects);
+                        if (authMetadata.reauth)
+                            serverAuthenticator.reauthenticate(authMetadata);
+                        return serverAuthenticator;
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                };
             } else {
                 LoginManager loginManager = loginManagers.get(clientSaslMechanism);
-                authenticator = buildClientAuthenticator(configs,
-                        saslCallbackHandlers.get(clientSaslMechanism),
-                        id,
-                        socket.getInetAddress().getHostName(),
-                        loginManager.serviceName(),
-                        transportLayer,
-                        subjects.get(clientSaslMechanism));
+                authenticatorCreator = authMetadata -> {
+                    try {
+                        SaslClientAuthenticator clientAuthenticator = buildClientAuthenticator(configs,
+                                saslCallbackHandlers.get(clientSaslMechanism),
+                                id,
+                                socket.getInetAddress().getHostName(),
+                                loginManager.serviceName(),
+                                transportLayer,
+                                subjects.get(clientSaslMechanism));
+                        if (authMetadata.reauth)
+                            clientAuthenticator.reauthenticate(authMetadata);
+                        return clientAuthenticator;
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                };
             }
-            return new KafkaChannel(id, transportLayer, authenticator, maxReceiveSize, memoryPool != null ? memoryPool : MemoryPool.NONE);
+            return new KafkaChannel(id, transportLayer, authenticatorCreator, maxReceiveSize, memoryPool != null ? memoryPool : MemoryPool.NONE);
         } catch (Exception e) {
             log.info("Failed to create channel due to ", e);
             throw new KafkaException(e);
