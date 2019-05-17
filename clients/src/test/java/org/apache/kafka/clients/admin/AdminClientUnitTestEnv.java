@@ -23,6 +23,7 @@ import org.apache.kafka.common.Node;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -53,14 +54,18 @@ public class AdminClientUnitTestEnv implements AutoCloseable {
     }
 
     public AdminClientUnitTestEnv(Time time, Cluster cluster, String... vals) {
-        this(time, cluster, newStrMap(vals));
+        this(time, cluster, clientConfigs(vals));
     }
 
     public AdminClientUnitTestEnv(Time time, Cluster cluster) {
-        this(time, cluster, newStrMap());
+        this(time, cluster, clientConfigs());
     }
 
     public AdminClientUnitTestEnv(Time time, Cluster cluster, Map<String, Object> config) {
+        this(time, cluster, config, Collections.emptyMap());
+    }
+
+    public AdminClientUnitTestEnv(Time time, Cluster cluster, Map<String, Object> config, Map<Node, Long> unreachableNodes) {
         this.time = time;
         this.cluster = cluster;
         AdminClientConfig adminClientConfig = new AdminClientConfig(config);
@@ -86,6 +91,7 @@ public class AdminClientUnitTestEnv implements AutoCloseable {
         });
 
         metadataManager.update(cluster, time.milliseconds());
+        unreachableNodes.forEach(mockClient::setUnreachable);
         this.adminClient = KafkaAdminClient.createInternal(adminClientConfig, metadataManager, mockClient, time);
     }
 
@@ -110,7 +116,7 @@ public class AdminClientUnitTestEnv implements AutoCloseable {
         this.adminClient.close();
     }
 
-    private static Map<String, Object> newStrMap(String... vals) {
+    static Map<String, Object> clientConfigs(String... vals) {
         Map<String, Object> map = new HashMap<>();
         map.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:8121");
         map.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "1000");
