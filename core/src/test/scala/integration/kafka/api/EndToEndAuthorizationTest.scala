@@ -363,6 +363,7 @@ abstract class EndToEndAuthorizationTest extends IntegrationTestHarness with Sas
 
     // Add ACLs and verify successful produce/consume/describe on first topic
     setReadAndWriteAcls(tp)
+    consumer.assign(List(tp, tp2).asJava) // Trigger metadata request after ACLs are configured
     consumeRecordsIgnoreOneAuthorizationException(consumer, numRecords, startingOffset = numRecords, topic2)
     sendRecords(producer, numRecords, tp)
     consumeRecords(consumer, numRecords, topic = topic)
