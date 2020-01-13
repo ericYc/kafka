@@ -112,10 +112,16 @@ object JaasTestUtils {
 
   case class JaasSection(contextName: String, modules: Seq[JaasModule]) {
     override def toString: String = {
-      s"""|$contextName {
+      if (modules.size == 1) {
+        s"""|$contextName
+ {
           |  ${modules.mkString("\n  ")}
-          |};
+
+            |};
           |""".stripMargin
+      } else {
+        JaasSection(contextName, modules.filterNot(_.name.contains("OAuthBearerLoginModule"))).toString
+      }
     }
   }
 

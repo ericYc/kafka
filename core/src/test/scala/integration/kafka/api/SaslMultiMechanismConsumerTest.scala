@@ -13,6 +13,7 @@
 package kafka.api
 
 import java.io.File
+import java.util.Properties
 
 import kafka.server.KafkaConfig
 import org.junit.{After, Before, Test}
@@ -22,13 +23,23 @@ import org.apache.kafka.common.security.auth.SecurityProtocol
 import scala.collection.JavaConverters._
 
 class SaslMultiMechanismConsumerTest extends BaseConsumerTest with SaslSetup {
-  private val kafkaClientSaslMechanism = "PLAIN"
-  private val kafkaServerSaslMechanisms = List("GSSAPI", "PLAIN")
+  private val kafkaClientSaslMechanism = "OAUTHBEARER"
+  private val kafkaServerSaslMechanisms = List("GSSAPI", "OAUTHBEARER")
   this.serverConfig.setProperty(KafkaConfig.ZkEnableSecureAclsProp, "true")
   override protected def securityProtocol = SecurityProtocol.SASL_SSL
   override protected lazy val trustStoreFile = Some(File.createTempFile("truststore", ".jks"))
-  override protected val serverSaslProperties = Some(kafkaServerSaslProperties(kafkaServerSaslMechanisms, kafkaClientSaslMechanism))
+  override protected val serverSaslProperties = Some(kafkaServerSaslProperties(kafkaServerSaslMechanisms, "GSSAPI"))
   override protected val clientSaslProperties = Some(kafkaClientSaslProperties(kafkaClientSaslMechanism))
+
+
+  override def modifyConfigs(props: Seq[Properties]): Unit = {
+    props.foreach { cfg =>
+      cfg.setProperty("listener.name.sasl_ssl.oauthbearer.sasl.jaas.config",
+        "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;")
+      cfg.setProperty("sasl.kerberos.service.name", "kafka")
+    }
+    super.modifyConfigs(props)
+  }
 
   @Before
   override def setUp(): Unit = {
