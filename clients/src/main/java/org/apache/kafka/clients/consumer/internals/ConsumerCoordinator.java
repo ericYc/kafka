@@ -857,10 +857,8 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 
                 if (future.succeeded()) {
                     return future.value();
-                } else if (!future.isRetriable()) {
-                    throw future.exception();
                 } else {
-                    timer.sleep(rebalanceConfig.retryBackoffMs);
+                    handleFailure(future, timer);
                 }
             } else {
                 return null;
@@ -1010,10 +1008,9 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
                 return true;
             }
 
-            if (future.failed() && !future.isRetriable())
-                throw future.exception();
-
-            timer.sleep(rebalanceConfig.retryBackoffMs);
+            if (future.failed()) {
+                handleFailure(future, timer);
+            }
         } while (timer.notExpired());
 
         return false;
