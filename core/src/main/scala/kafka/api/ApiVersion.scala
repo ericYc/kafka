@@ -124,6 +124,8 @@ object ApiVersion {
 
   val latestVersion: ApiVersion = allVersions.last
 
+  def isTruncationOnFetchSupported(version: ApiVersion): Boolean = version >= KAFKA_2_7_IV1
+
   /**
    * Return the minimum `ApiVersion` that supports `RecordVersion`.
    */

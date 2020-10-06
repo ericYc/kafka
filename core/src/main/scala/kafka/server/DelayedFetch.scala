@@ -27,11 +27,12 @@ import org.apache.kafka.common.requests.FetchRequest.PartitionData
 
 import scala.collection._
 
-case class FetchPartitionStatus(startOffsetMetadata: LogOffsetMetadata, fetchInfo: PartitionData) {
+case class FetchPartitionStatus(startOffsetMetadata: LogOffsetMetadata, fetchInfo: PartitionData, hasDivergingEpoch: Boolean) {
 
   override def toString: String = {
     "[startOffsetMetadata: " + startOffsetMetadata +
       ", fetchInfo: " + fetchInfo +
+      ", hasDivergingEpoch: " + hasDivergingEpoch +
       "]"
   }
 }
@@ -77,6 +78,7 @@ class DelayedFetch(delayMs: Long,
    * Case E: This broker is the leader, but the requested epoch is now fenced
    * Case F: The fetch offset locates not on the last segment of the log
    * Case G: The accumulated bytes from all the fetching partitions exceeds the minimum bytes
+   * Case H: A diverging epoch was found, return response to trigger truncation
    * Upon completion, should return whatever data is available for each valid partition
    */
   override def tryComplete(): Boolean = {
@@ -94,6 +96,12 @@ class DelayedFetch(delayMs: Long,
               case FetchLogEnd => offsetSnapshot.logEndOffset
               case FetchHighWatermark => offsetSnapshot.highWatermark
               case FetchTxnCommitted => offsetSnapshot.lastStableOffset
+            }
+
+            // Case H: Return diverging epoch in response to trigger truncation
+            if (fetchStatus.hasDivergingEpoch) {
+              debug(s"Satisfying fetch $fetchMetadata since it has diverging epoch requiring truncation for partition $topicPartition.")
+              return forceComplete()
             }
 
             // Go directly to the check for Case G if the message offsets are the same. If the log segment
